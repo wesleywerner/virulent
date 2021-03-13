@@ -971,6 +971,11 @@ function load_stats(i)
  isptype=rem>8 and ceta>0
  instasis=clev<2
 
+ -- PostPicoFix: no infection level text
+ if clev == 0 then
+  clevtxt = "NONE"
+ end
+
  if rem==0 then
   remcode=""
   remname=""
@@ -1081,7 +1086,7 @@ function get_level_name(l,d)
  elseif l>0 then
   return "IN STASIS"
  else
-  return "CLEAR"
+  return "CURED"
  end
 end
 
