@@ -2859,7 +2859,7 @@ function remedy_chart(i,x,y,cw,h)
   local cy=y+h-h*ep
   rectfill(cx,
            cy,
-           cx+cw,
+           cx+cw-1,
            y+h-1,ec)
   -- week column
   rect(cx,y,cx+cw,y+h,gc)
