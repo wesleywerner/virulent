@@ -1350,9 +1350,9 @@ end
 
 local function curtains(d,t,l,bt)
  if not t then
-  print("X skip",1,122,13)
+  print("x:skip",1,122,13)
   if d.f then
-   print("X skip",1,122,12)
+   print("x:skip",1,122,12)
   end
   -- disabled curtain clipping, does not work in the intro
   --clip(0,64-d.z,128,d.z*2)
@@ -1546,7 +1546,7 @@ function menu_screen.draw()
  end
  -- keys hint
  if _t>0 then
-  print("arrows + X",45,90,5+(love.timer.getTime()%2))
+  print("arrows + x",45,90,5+(love.timer.getTime()%2))
  end
  -- floating rock
  --pal(1,5)
@@ -1764,7 +1764,7 @@ function report_screen.draw()
  end
  draw_ticker()
  if done then
-  print("press X",1,116,13)
+  print("press x",1,116,13)
  end
 end
 
@@ -1968,7 +1968,7 @@ function radar_screen.init(lm)
   _t=165
   toolbar={
    {242,"close",goto_command},
-   {243,"Z launch missile ",launch}}
+   {243,"z:launch missile ",launch}}
   done=true
   lock_tb()
  else
@@ -1995,7 +1995,7 @@ function radar_screen.draw()
   end
  else
   if done then
-   print("press X",1,116,11)
+   print("press x",1,116,11)
   end
   draw_ticker()
  end
@@ -2127,7 +2127,7 @@ function command_screen.draw()
  end
  draw_tb()
  if done then
-  print("Z end turn",43,110,12)
+  print("z:end turn",43,110,12)
  end
 end
 
@@ -2269,7 +2269,7 @@ function region_screen.init(no_anim)
  calc_land_anim(no_anim)
  toolbar={{242,"close",goto_command}}
  if needs_remedy() and actno>0 then
-  add(toolbar,{244,"Z apply remedy ",goto_remedy})
+  add(toolbar,{244,"z:apply remedy ",goto_remedy})
  end
  printw(29)
  print_title(cname,9)
@@ -2403,7 +2403,7 @@ function remedy_screen.init()
  _c=0
  toolbar={
   {242,"close",close_screen},
-  {246,"Z apply ",apply_remedy}}
+  {246,"z:apply ",apply_remedy}}
  if not ispne then
   add(toolbar,{248,"show labels",nil})
  end
@@ -2637,7 +2637,7 @@ function help_screen.draw()
   print("THE C-VIRUS",45,_y+25,13)
   _y=_y+40
 
-  par"select a country and press X"
+  par"select a country and press x"
   par"to open the regional update."
   par"in this screen you see"
   par"country statistics and"
@@ -2648,7 +2648,7 @@ function help_screen.draw()
   par"down until you focus the"
   par"command toolbar. select"
   par"the `launch missle` option"
-  par"and press X."
+  par"and press x."
 
   head"END OF TURN"
   par"when your alotted actions are"
@@ -2734,7 +2734,7 @@ function help_screen.draw()
   clip()
   rectfill(0,120,127,127,13)
   print("up/dn scroll",1,121,1)
-  print("X close",96,121,1)
+  print("x:close",96,121,1)
   -- progress
   line(0,128,(_i/_p)*127,128,10)
  end
