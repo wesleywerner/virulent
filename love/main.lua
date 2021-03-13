@@ -1140,7 +1140,7 @@ function end_condition()
  local code=false
  if turnno==max_turns(skill) then
   code=1
- elseif curedc==#stats then
+ elseif curedc==#stats-gstats[2][1] then
   code=2
  elseif gstats[2][1]==#stats then
   code=3
