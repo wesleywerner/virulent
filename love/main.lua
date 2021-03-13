@@ -95,7 +95,6 @@ end
 
 -- Get the palette index of a pixel in the spritesheet at x,y.
 function sget(x, y)
- -- Compensate for Pico's zero-based color indexing
  return spritesheet_map[x][y]
 end
 
@@ -890,8 +889,8 @@ function landhit(x,y)
    -- pos in spritesheet
    cx=flr(cx+(dat[1]%16)*8)
    cy=flr(cy+flr(dat[1]/16)*8)
-   -- test pixel color
-   if sget(cx,cy)>0 then
+   -- test pixel color: a hit is any but transparent
+   if sget(cx,cy)>1 then
     return i
    end
   end
