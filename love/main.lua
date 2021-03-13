@@ -2988,7 +2988,7 @@ function update_ticker()
   if tickpos>0 then
    sfx(7)
   end
-  if tickpos<-650 then
+  if tickpos<-300 then
    tickpos=nil
    del(ticker, ticker[1])
   end
