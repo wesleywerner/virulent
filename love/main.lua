@@ -671,12 +671,16 @@ function toggle_fullscreen()
   WINDOW_W, WINDOW_H = 128*RENDER_SCALE, 128*RENDER_SCALE
   -- Make it so!
   love.window.setMode(WINDOW_W, WINDOW_H, {fullscreen=true})
+  -- hide cursor
+  love.mouse.setVisible(false)
  else
   -- Restore default render scale and window
   RENDER_LEFT = 0
   RENDER_SCALE = DEFAULT_RENDER_SCALE
   WINDOW_W, WINDOW_H = 128*RENDER_SCALE, 128*RENDER_SCALE
   love.window.setMode(WINDOW_W, WINDOW_H, {fullscreen=false})
+  -- show cursor
+  love.mouse.setVisible(true)
  end
  -- force redraw the current state
  if state then
