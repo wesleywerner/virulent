@@ -2386,12 +2386,16 @@ function region_screen.init(no_anim)
 end
 
 function region_screen.draw()
- if shift_lerp() then
+ -- Port note: the original code tied shift_lerp() and shift_clip() to
+ -- this draw method. Löve's high frame rate caused these effects to
+ -- happen much too quickly. Moving these calls to the update method
+ -- and testing _l and _c in this draw fixed the problem.
+ if _l<1 then
   rectfill(0,10,128,110,0)
   draw_con(ci,nil,
     lerp(_x,_o,_l),
     lerp(_y,_p,_l))
- elseif shift_clip() then
+ elseif _c<127 then
   print_stats()
  elseif can_redraw() then
   -- force redraw when toggling full screen
@@ -2401,6 +2405,9 @@ function region_screen.draw()
 end
 
 function region_screen.update()
+ if not shift_lerp() then
+  shift_clip()
+ end
  update_tb()
  if btnp("z") and needs_remedy() then
   goto_remedy()
