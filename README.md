@@ -18,15 +18,23 @@ If you don't have a Pico-8 console, you can play the online [web version](https:
 
 Virulent is a turn-based game where you use action points to manage a viral outbreak on earth. The story is that the earth is hit by asteroids carrying a deadly virus, your task is to launch missiles to prevent any more infections, while administering remedies to infected countries and cure them.
 
+### Mute
+
+Press `control` + `m` to mute/unmute audio.
+
+### Full screen
+
+Press `alt` + `return` to toggle full screen.
+
 ### Controls
 
-To highlight a country, choose a remedy or select an asteroid target.
+To highlight a country, choose a remedy or select an asteroid:
 
-up, down, left, right arrow keys.
+`up`, `down`, `left`, `right` arrow keys.
 
 ### Actions
 
-To open country details or press a toolbar button.
+To open country details or press a toolbar button:
 
 Press the `X` key.
 
@@ -39,7 +47,7 @@ On all screens you can use the `Z` key as a shortcut instead of using the toolba
 - On the Regional screen, it opens the remedy screen if a remedy can be applied.
 - On the Remedy screen, it applies the selected remedy.
 - On the Radar screen, it launches a missile.
-- On the Command screen, it ends the turn. Only when no more actions can be performed this turn.
+- On the Command screen, it ends the turn (only when no more actions can be performed).
 
 ### The Toolbar
 
@@ -47,7 +55,7 @@ The toolbar is located at the bottom of the screen. Use the arrow keys to highli
 
 On the Command Station screen, press the `down` key to focus the toolbar at the bottom. To return to country selection, press the `up` key.
 
-Instructions are in the game. Choose the Help icon to read them.
+Instructions are in-game. Choose the Help toolbar icon to read them.
 
 # History
 
