@@ -513,8 +513,207 @@ function pal(a, b)
  config.palette_swap[a+1] = b+1
 end
 
+-- ╒═══════════════════════════════════════════════════════════════════════════╕
+-- │ LOVE CALLBACKS                                                            │
+-- ├───────────────────────────────────────────────────────────────────────────┘
+-- │ Nothing special here. Handles the main game loop and drawing, key presses
+-- │ and loading of resources and setup of calculated lookup tables.
+-- │
+-- │                                                                         ┌─┐
+-- ╘═════════════════════════════════════════════════════════════════════════╧═╛
 
-----------------------------------------------------------[ Lookup Tables      ]
+function love.load()
+
+ -- Set image interpolation to aliased
+ love.graphics.setDefaultFilter("nearest", "nearest")
+
+ -- Draw lines aliased
+ love.graphics.setLineStyle("rough")
+
+ -- Set up the display
+ config.render_scale = config.windowed_scale
+ config.window_w = 128 * config.render_scale
+ config.window_h = 128 * config.render_scale
+ love.window.setMode(config.window_w, config.window_h)
+
+ -- Load the font
+ data.small_font = love.graphics.newFont("PICO-8 mono.ttf", 4, "mono")
+ data.large_font = love.graphics.newFont("PICO-8 mono.ttf", 20, "mono")
+ love.graphics.setFont(data.small_font)
+
+ -- Load the sprite sheet image data
+ data.sprite_sheet_image_data = love.image.newImageData('spritesheet.png')
+
+ -- Set up palette rotation tables. Alter sprite sheet data to be transparent.
+ setup_palette()
+
+ -- Create the sprite sheet image from altered image data
+ data.sprite_sheet = love.graphics.newImage(data.sprite_sheet_image_data)
+
+ -- Allocate the off-screen drawing canvas
+ data.screen_canvas = love.graphics.newCanvas(128, 128)
+
+ -- Load game music and sound effects
+ data.game_music = love.audio.newSource("virulent.ogg", "stream")
+ data.game_sfx = {}
+ data.game_sfx[0] = love.audio.newSource("sfx0.ogg", "static")
+ data.game_sfx[1] = love.audio.newSource("sfx1.ogg", "static")
+ data.game_sfx[2] = love.audio.newSource("sfx2.ogg", "static")
+ data.game_sfx[3] = love.audio.newSource("sfx3.ogg", "static")
+ data.game_sfx[4] = love.audio.newSource("sfx4.ogg", "static")
+ data.game_sfx[5] = love.audio.newSource("sfx5.ogg", "static")
+ data.game_sfx[6] = love.audio.newSource("sfx6.ogg", "static")
+ data.game_sfx[7] = love.audio.newSource("sfx7.ogg", "static")
+
+ -- Enable key press repeating
+ love.keyboard.setKeyRepeat(true)
+
+ -- Print debug information
+ printw(1)
+
+ -- Reset game state
+ reset_game()
+
+ -- Switch to the intro screen
+ switch(intro_screen)
+
+end
+
+function love.update(dt)
+
+ -- Pause updates while prompting to quit
+ if config.quit_game_prompt then
+  return
+ end
+
+ -- Update limiter
+ config.fpscounter = config.fpscounter + dt
+ if config.fpscounter < config.fpslimit then
+  return
+ end
+
+ -- Resume counting the amount over the limit
+ config.fpscounter = config.fpslimit - config.fpscounter
+
+ -- Update the game state
+ if state then
+  state.update()
+ end
+
+ -- Clear the button pressed stack
+ data.button_stack = {}
+end
+
+function love.draw()
+
+ if not config.quit_game_prompt then
+
+  -- Scope drawing to canvas
+  love.graphics.setCanvas(data.screen_canvas)
+
+  -- Draw the game state
+  if state then
+   state.draw()
+  end
+
+ end
+
+ -- Render canvas to display
+ love.graphics.setCanvas()
+ love.graphics.setColor(1,1,1)
+ love.graphics.setBlendMode("alpha", "premultiplied")
+ love.graphics.draw(data.screen_canvas, config.render_alignment, 0, 0, config.render_scale, config.render_scale)
+ love.graphics.setBlendMode("alpha", "alphamultiply")
+
+ if config.quit_game_prompt then
+  love.graphics.setColor(0,0,0,0.7)
+  love.graphics.rectangle("fill", config.render_alignment,0, config.window_w, config.window_h)
+  love.graphics.setColor(1,0,0)
+  love.graphics.print("Quit? [Y/N]", config.render_alignment + (config.window_w/2)-100, (config.window_h/2))
+ end
+
+end
+
+function love.keypressed(key, scancode, isrepeat)
+
+ -- Handle quit keys
+ if config.quit_game_prompt then
+  if key == "y" then
+   love.event.quit()
+  elseif key == "n" or key == "escape" then
+   config.quit_game_prompt = false
+   love.graphics.setFont(data.small_font)
+  end
+  -- Stop processing further keys
+  return
+ end
+
+ -- capture key presses
+ data.button_stack[key] = true
+
+ if key == "escape" then
+  config.quit_game_prompt = true
+  love.graphics.setFont(data.large_font)
+ elseif key == "printscreen" then
+  love.graphics.captureScreenshot('virulent_' .. os.time() .. '.png')
+ elseif key == "return" then
+  if love.keyboard.isDown("ralt") then
+   toggle_fullscreen()
+  end
+ end
+
+end
+
+-- Toggle full screen mode.
+-- Calculates the render scale from the display dimensions.
+function toggle_fullscreen()
+
+ config.is_full_screen = not config.is_full_screen
+
+ if config.is_full_screen then
+  -- Fetch flags of current display
+  local _, _, flags = love.window.getMode()
+  -- Fetch dimensions
+  local disp_w, disp_h = love.window.getDesktopDimensions(flags.display)
+  -- Estimate the nominal scale given the native display size
+  config.render_scale = math.floor(disp_h/128)
+  -- Estimate the left offset for centre translation
+  config.render_alignment = (disp_w/2) - ((128 * config.render_scale)/2)
+  config.window_w, config.window_h = 128 * config.render_scale, 128 * config.render_scale
+  -- Make it so!
+  love.window.setMode(config.window_w, config.window_h, {fullscreen=true})
+  -- hide cursor
+  love.mouse.setVisible(false)
+ else
+  -- Restore default render scale
+  config.render_alignment = 0
+  config.render_scale = config.windowed_scale
+  config.window_w, config.window_h = 128 * config.render_scale, 128 * config.render_scale
+  love.window.setMode(config.window_w, config.window_h, {fullscreen=false})
+  -- show cursor
+  love.mouse.setVisible(true)
+ end
+
+ -- force redraw the current state
+ if state then
+  set_redraw()
+ end
+
+end
+
+-- ╒═══════════════════════════════════════════════════════════════════════════╕
+-- │ START OF GAME CODE                                                        │
+-- ├───────────────────────────────────────────────────────────────────────────┘
+-- │ This marks the start of the game code. Everything below this point is
+-- │ documented in the Virulent design document - see the "doc" directory.
+-- │
+-- │ Enjoy reading it and good luck understanding it.
+-- │ WW
+-- │
+-- │                                                                         ┌─┐
+-- ╘═════════════════════════════════════════════════════════════════════════╧═╛
+
+-----------------------------------------------------[ Virulent: Lookup Tables ]
 -->8
 
 stats={
@@ -632,196 +831,8 @@ gstats={
  {12,   0}
 }
 
----------------------------------------------------------[ Debugging Functions ]
-
-function rotate_debug_logs()
- love.filesystem.createDirectory("logs")
- local logs = love.filesystem.getDirectoryItems("logs")
- for _, filename in ipairs(logs) do
-  print_console("found log",filename)
-  -- seconds since then
-  print_console(os.difftime(os.time(), 1615640963))
- end
-end
-
-----------------------------------------------------------[ Love               ]
-function love.load()
-
- -- Set image interpolation to aliased
- love.graphics.setDefaultFilter("nearest", "nearest")
-
- -- Draw lines aliased
- love.graphics.setLineStyle("rough")
-
- -- Set up the display
- config.render_scale = config.windowed_scale
- config.window_w = 128 * config.render_scale
- config.window_h = 128 * config.render_scale
- love.window.setMode(config.window_w, config.window_h)
-
- -- Load the font
- data.small_font = love.graphics.newFont("PICO-8 mono.ttf", 4, "mono")
- data.large_font = love.graphics.newFont("PICO-8 mono.ttf", 20, "mono")
- love.graphics.setFont(data.small_font)
-
- -- Load the sprite sheet image data
- data.sprite_sheet_image_data = love.image.newImageData('spritesheet.png')
-
- -- Set up palette rotation tables. Alter sprite sheet data to be transparent.
- setup_palette()
-
- -- Create the sprite sheet image from altered image data
- data.sprite_sheet = love.graphics.newImage(data.sprite_sheet_image_data)
-
- -- Allocate the off-screen drawing canvas
- data.screen_canvas = love.graphics.newCanvas(128, 128)
-
- -- Load game music and sound effects
- data.game_music = love.audio.newSource("virulent.ogg", "stream")
- data.game_sfx = {}
- data.game_sfx[0] = love.audio.newSource("sfx0.ogg", "static")
- data.game_sfx[1] = love.audio.newSource("sfx1.ogg", "static")
- data.game_sfx[2] = love.audio.newSource("sfx2.ogg", "static")
- data.game_sfx[3] = love.audio.newSource("sfx3.ogg", "static")
- data.game_sfx[4] = love.audio.newSource("sfx4.ogg", "static")
- data.game_sfx[5] = love.audio.newSource("sfx5.ogg", "static")
- data.game_sfx[6] = love.audio.newSource("sfx6.ogg", "static")
- data.game_sfx[7] = love.audio.newSource("sfx7.ogg", "static")
-
- -- Enable key press repeating
- love.keyboard.setKeyRepeat(true)
-
- -- Print debug information
- printw(1)
-
- -- Reset game state
- reset_game()
-
- -- Switch to the intro screen
- switch(intro_screen)
-
- -- Debug: show menu
- --goto_menu()
-
-end
-
-function love.update(dt)
-
- -- Pause updates while prompting to quit
- if config.quit_game_prompt then
-  return
- end
-
- -- Update limiter
- config.fpscounter = config.fpscounter + dt
- if config.fpscounter < config.fpslimit then
-  return
- end
-
- -- Resume counting the amount over the limit
- config.fpscounter = config.fpslimit - config.fpscounter
-
- -- Update the game state
- if state then
-  state.update()
- end
-
- -- Clear the button pressed stack
- data.button_stack = {}
-end
-
-function love.draw()
-
-  -- State drawing is paused while quit_game_prompt
- if not config.quit_game_prompt then
-
-  -- Scope drawing to canvas
-  love.graphics.setCanvas(data.screen_canvas)
-
-  -- Draw the game state
-  if state then
-   state.draw()
-  end
-
- end
-
- -- Render canvas to display
- love.graphics.setCanvas()
- love.graphics.setColor(1,1,1)
- love.graphics.setBlendMode("alpha", "premultiplied")
- love.graphics.draw(data.screen_canvas, config.render_alignment, 0, 0, config.render_scale, config.render_scale)
- love.graphics.setBlendMode("alpha", "alphamultiply")
-
- if config.quit_game_prompt then
-  love.graphics.setColor(0,0,0,0.7)
-  love.graphics.rectangle("fill", config.render_alignment,0, config.window_w, config.window_h)
-  love.graphics.setColor(1,0,0)
-  love.graphics.print("Quit? [Y/N]", config.render_alignment + (config.window_w/2)-100, (config.window_h/2))
- end
-
-end
-
-function love.keypressed(key, scancode, isrepeat)
-
- -- Handle quit keys
- if config.quit_game_prompt then
-  if key == "y" then
-   love.event.quit()
-  elseif key == "n" or key == "escape" then
-   config.quit_game_prompt = false
-   love.graphics.setFont(data.small_font)
-  end
-  -- Stop processing further keys
-  return
- end
-
- -- capture key presses
- data.button_stack[key] = true
-
- if key == "escape" then
-  config.quit_game_prompt = true
-  love.graphics.setFont(data.large_font)
- elseif key == "printscreen" then
-  love.graphics.captureScreenshot('virulent_' .. os.time() .. '.png')
- elseif key == "return" then
-  if love.keyboard.isDown("ralt") then
-   toggle_fullscreen()
-  end
- end
-end
-
-function toggle_fullscreen()
- config.is_full_screen = not config.is_full_screen
- if config.is_full_screen then
-  -- Fetch flags of current display where our game is running
-  local _, _, flags = love.window.getMode()
-  -- Fetch the display size
-  local disp_w, disp_h = love.window.getDesktopDimensions(flags.display)
-  -- Estimate the nominal scale given the native display size
-  config.render_scale = math.floor(disp_h/128)
-  -- Estimate the left offset for center translation
-  config.render_alignment = (disp_w/2) - ((128 * config.render_scale)/2)
-  config.window_w, config.window_h = 128 * config.render_scale, 128 * config.render_scale
-  -- Make it so!
-  love.window.setMode(config.window_w, config.window_h, {fullscreen=true})
-  -- hide cursor
-  love.mouse.setVisible(false)
- else
-  -- Restore default render scale and window
-  config.render_alignment = 0
-  config.render_scale = config.windowed_scale
-  config.window_w, config.window_h = 128 * config.render_scale, 128 * config.render_scale
-  love.window.setMode(config.window_w, config.window_h, {fullscreen=false})
-  -- show cursor
-  love.mouse.setVisible(true)
- end
- -- force redraw the current state
- if state then
-  set_redraw()
- end
-end
-
 -----------------------------------------------------[ Virulent: State Control ]
+-->8
 
 function can_redraw()
  if redraw then
@@ -3204,21 +3215,8 @@ function cmk.between(a,b)
 end
 
 -- ╒═══════════════════════════════════════════════════════════════════════════╕
--- │                                                                           │
+-- │ END OF FILE                                                               │
 -- ├───────────────────────────────────────────────────────────────────────────┘
--- │
--- │
--- │
--- │
--- │
--- │
--- │
--- │
--- │
--- │
--- │
--- │
 -- │
 -- │                                                                         ┌─┐
 -- ╘═════════════════════════════════════════════════════════════════════════╧═╛
---
