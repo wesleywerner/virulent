@@ -92,7 +92,7 @@ print_console = print
 -- We +1 as Pico's palette is zero based, while our palette is 1 based.
 -- Defaults to black if no c is given.
 function setPalette(c)
- love.graphics.setColor(palette[math.floor(c or 0)+1])
+ love.graphics.setColor(config.palette[math.floor(c or 0)+1])
 end
 
 -- Clear the screen with the given colour c.
@@ -169,14 +169,14 @@ function spr(n, x, y, w, h, flip_x, flip_y)
  for yoffset = 0, 7 do
   for xoffset = 0, 7 do
    -- Lookup pixel colour index
-   local index = data.sprite_sheet_map[sprite_x + xoffset][sprite_y + yoffset]
+   local index = data.sprite_sheet_cim[sprite_x + xoffset][sprite_y + yoffset]
    -- Swap the palette
-   if data.palette_swap then
-    index = data.palette_swap[index] or index
+   if config.palette_swap then
+    index = config.palette_swap[index] or index
    end
    -- Draw non-transparent colours
    if index > 1 then
-    love.graphics.setColor(palette[index])
+    love.graphics.setColor(config.palette[index])
     love.graphics.points(x+xoffset+1, y+yoffset+1)
    end
   end
@@ -186,7 +186,7 @@ end
 
 -- Get colour index of sprite sheet pixel x, y.
 function sget(x, y)
- return data.sprite_sheet_map[x][y]
+ return data.sprite_sheet_cim[x][y]
 end
 
 -- Set drawing translation offset.
@@ -350,6 +350,12 @@ config = {
  window_w = 0,
  window_h = 0,
 
+ -- Palette storage
+ palette = nil,
+
+ -- Palette swap storage
+ palette_swap = nil,
+
 }
 
 data = {
@@ -364,7 +370,9 @@ data = {
  -- Sprite sheet
  sprite_sheet = nil,
  sprite_sheet_image_data = nil,
- sprite_sheet_map = nil,
+
+ -- Sprite sheet colour index map
+ sprite_sheet_cim = nil,
 
  -- Quad cache for calls to sspr()
  sprite_cache = {},
@@ -377,122 +385,25 @@ data = {
  small_font = nil,
  large_font = nil,
 
- -- Palette swap storage
- palette_swap
-
 }
 
-----------------------------------------------------------[ Palette Swapping   ]
--- │ I achieved this by predefining the RGB components of the 16 colors used in
--- │ the sprite sheet, and generate a palette lookup table to easily find the
--- │ color index of a RGB combination. I then generate a map of the sprite sheet
--- │ which stores the color index for each pixel. While processing this pixel map
--- │ I sneakily update the alpha value in the sprite sheet image data so that
+-- ╒═══════════════════════════════════════════════════════════════════════════╕
+-- │ 16 COLOUR PALETTE SWAP EMULATION                                          │
+-- ├───────────────────────────────────────────────────────────────────────────┘
+-- │ I achieved this by generating a palette lookup table to quickly find the
+-- │ colour index of a RGB combination, and use that to build a map of the
+-- │ sprite sheet colour index for each pixel. While processing this pixel map
+-- │ I sneakily update the alpha value in the image data so that
 -- │ the `sspr` drawing function knows about transparency.
--- │ Finally in the sprite drawing function `spr` I perform a color conversion
--- │ if a palette swap table is set for the drawing operation.
--- │ You can find these functions, and some commented code, under the
--- │ "Palette Swapping" code.
+-- │ Finally in the sprite drawing function `spr` I perform a colour conversion
+-- │ if the palette swap table has values for the current drawing operation.
+-- │
+-- │
+-- │                                                                         ┌─┐
+-- ╘═════════════════════════════════════════════════════════════════════════╧═╛
 
-function round(num, numDecimalPlaces)
- local mult = 10^(numDecimalPlaces or 0)
- return math.floor(num * mult + 0.5) / mult
-end
-
--- Normalize palette values, build palette swap lookup tables.
-function setup_palette()
-
- -- Normalize palette values to reduce error.
- -- index   r       g       b
- -- 1       0       0       0
- -- 2       0.11    0.17    0.33
- -- 3       0.49    0.15    0.33
- -- 4       0       0.53    0.32
- -- 5       0.67    0.32    0.21
- -- 6       0.37    0.34    0.31
- -- 7       0.76    0.76    0.78
- -- 8       1       0.95    0.91
- -- 9       1       0       0.3
- -- 10      1       0.64    0
- -- 11      1       0.93    0.15
- -- 12      0       0.89    0.21
- -- 13      0.16    0.68    1
- -- 14      0.51    0.46    0.61
- -- 15      1       0.47    0.66
- -- 16      1       0.8     0.67
- for k, v in ipairs(palette) do
-  local r, g, b = unpack(v)
-  r, g, b = round(r,2), round(g,2), round(b,2)
-  palette[k] = { r, g, b }
- end
-
- -- Build a lookup table for fast color indexing.
- -- The sparse table structure maps to the red, green and blue color components.
- -- Finding the index of a color is thus as easy as palette_lookup[r][g][b]
- local palette_lookup = {}
- for k, v in ipairs(palette) do
-  local r, g, b = unpack(v)
-  palette_lookup[r] = palette_lookup[r] or {}
-  palette_lookup[r][g] = palette_lookup[r][g] or {}
-  palette_lookup[r][g][b] = k
- end
-
- -- Scan the sprite sheet to build a map of each pixel and it's color index.
- -- This allows quick color lookup without repeat calls to getPixel().
- data.sprite_sheet_map = {}
- local width, height = data.sprite_sheet_image_data:getDimensions()
- for y = 0, height-1 do
-  for x = 0, width-1 do
-
-   -- Get the pixel components
-   local r, g, b = data.sprite_sheet_image_data:getPixel(x, y)
-
-   -- Round their values
-   r, g, b = round(r,2), round(g,2), round(b,2)
-
-   -- Create the X component map
-   data.sprite_sheet_map[x] = data.sprite_sheet_map[x] or {}
-
-   -- Look up this RGB palette color equivalent
-   local cindex = palette_lookup[r][g][b]
-
-   -- Store the index for this pixel
-   data.sprite_sheet_map[x][y] = cindex
-
-   -- Write this pixel in imagedata as transparent
-   -- so that calls to sspr() works as expected.
-   -- color 1 is black/transparent.
-   if cindex == 1 then
-    data.sprite_sheet_image_data:setPixel(x, y, 1, 1, 1, 0)
-   end
-
-  end
- end
-
-end
-
--- Set palette swap values.
--- Compensate for Pico-8's 0 based colour indexing.
-function pal(a, b)
- -- Clear the palette swap table
- if not a or not b then
-  data.palette_swap = nil
-  return
- end
- -- Create a new palette swap table, preserving existing
- data.palette_swap = data.palette_swap or {}
- -- Store the palette swap colour indexes
- -- Note: The Pico-8 pal() method can also receive a table of mappings.
- -- This is not implemented as this game did not use that method signature.
- data.palette_swap[a+1] = b+1
-end
-
-
-----------------------------------------------------------[ Lookup Tables      ]
--->8
-
--- The color palette
-palette = {
+-- The 16 colour palette
+config.palette = {
  {  0/255,   0/255,   0/255}, -- 0 Black
  { 29/255,  43/255,  83/255}, -- 1 Midnight Blue
  {126/255,  37/255,  83/255}, -- 2 Maroon
@@ -510,6 +421,101 @@ palette = {
  {255/255, 119/255, 168/255}, -- 14 Pink
  {255/255, 204/255, 170/255} -- 15 Beige
 }
+
+-- Build palette swap lookup tables.
+function setup_palette()
+
+ -- Rounds a decimal
+ local function round(num, numDecimalPlaces)
+  local mult = 10^(numDecimalPlaces or 0)
+  return math.floor(num * mult + 0.5) / mult
+ end
+
+ -- Normalize the palette values to reduce error, yielding something like:
+ -- index   r       g       b
+ -- 1       0       0       0
+ -- 2       0.11    0.17    0.33
+ -- 3       0.49    0.15    0.33
+ -- 4       0       0.53    0.32
+ -- 5       0.67    0.32    0.21
+ -- 6       0.37    0.34    0.31
+ -- 7       0.76    0.76    0.78
+ -- 8       1       0.95    0.91
+ -- 9       1       0       0.3
+ -- 10      1       0.64    0
+ -- 11      1       0.93    0.15
+ -- 12      0       0.89    0.21
+ -- 13      0.16    0.68    1
+ -- 14      0.51    0.46    0.61
+ -- 15      1       0.47    0.66
+ -- 16      1       0.8     0.67
+ for k, v in ipairs(config.palette) do
+  local r, g, b = unpack(v)
+  r, g, b = round(r,2), round(g,2), round(b,2)
+  config.palette[k] = { r, g, b }
+ end
+
+ -- Build a lookup table for fast colour indexing.
+ -- The sparse table structure maps the red, green and blue components.
+ -- Finding the index of a colour is thus as easy as palette_lookup[r][g][b].
+ local palette_lookup = {}
+ for k, v in ipairs(config.palette) do
+  local r, g, b = unpack(v)
+  palette_lookup[r] = palette_lookup[r] or {}
+  palette_lookup[r][g] = palette_lookup[r][g] or {}
+  palette_lookup[r][g][b] = k
+ end
+
+ -- Build a colour index map of each pixel in the sprite sheet.
+ data.sprite_sheet_cim = {}
+ local width, height = data.sprite_sheet_image_data:getDimensions()
+ for y = 0, height-1 do
+  for x = 0, width-1 do
+
+   -- Get the pixel components
+   local r, g, b = data.sprite_sheet_image_data:getPixel(x, y)
+
+   -- Normalize values
+   r, g, b = round(r,2), round(g,2), round(b,2)
+
+   -- Look up colour index
+   local cindex = palette_lookup[r][g][b]
+
+   -- Map the index
+   data.sprite_sheet_cim[x] = data.sprite_sheet_cim[x] or {}
+   data.sprite_sheet_cim[x][y] = cindex
+
+   -- Set transparency in image data where colour is 1.
+   if cindex == 1 then
+    data.sprite_sheet_image_data:setPixel(x, y, 1, 1, 1, 0)
+   end
+
+  end
+ end
+
+end
+
+-- Set palette swap.
+-- Colour index a is replaced by colour index b.
+-- Empty values clears the swap table.
+function pal(a, b)
+ -- Clear the palette swap table
+ if not a or not b then
+  config.palette_swap = nil
+  return
+ end
+ -- Create a new palette swap table, preserving existing
+ config.palette_swap = config.palette_swap or {}
+ -- Store the palette swap colour indexes.
+ -- Compensate for Pico-8's 0 based colour indexing.
+ -- Note: The Pico-8 pal() method can also receive a table of mappings.
+ -- This is not implemented as this game did not use that method signature.
+ config.palette_swap[a+1] = b+1
+end
+
+
+----------------------------------------------------------[ Lookup Tables      ]
+-->8
 
 stats={
   {"CANADA",         37,   {2, 5}},
