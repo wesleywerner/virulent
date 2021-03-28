@@ -2398,8 +2398,9 @@ function region_screen.draw()
  elseif _c<127 then
   print_stats()
  elseif can_redraw() then
-  -- force redraw when toggling full screen
+  -- Port addition: redraw on toggle full-screen
   calc_land_anim(true)
+  print_title(cname,9)
  end
  draw_tb()
 end
