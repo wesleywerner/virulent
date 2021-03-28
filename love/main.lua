@@ -63,9 +63,14 @@
 -- │ The palette swapping routine was a nice challenge, and a rewarding one
 -- │ to achieve when I saw the first colours swap on-screen.
 -- │
--- │  Though one were to live a hundred years lazy and effortless, the
--- │  life of a single day is better if one makes a real effort.
--- │   -- Dhammapada verse 112
+-- │ All draws occur to an off-screen canvas, which is scaled up on display.
+-- │ The original game code, which targets a 128x128 screen, works unmodified.
+-- │ We can also emulate Pico's behaviour of not clearing the display on
+-- │ each draw frame.
+-- │
+-- │       Though one were to live a hundred years lazy and effortless, the
+-- │       life of a single day is better if one makes a real effort.
+-- │        -- Dhammapada verse 112
 -- │                                                                         ┌─┐
 -- ╘═════════════════════════════════════════════════════════════════════════╧═╛
 --
@@ -143,12 +148,12 @@ end
 -- Note: flip_x, flip_y not implemented.
 function sspr(sx, sy, sw, sh, dx, dy, dw, dh, flip_x, flip_y)
  local key = sx .. sy .. sw .. sh
- if not sprite_stack[key] then
+ if not data.sprite_cache[key] then
   local q = love.graphics.newQuad(sx, sy, sw, sh, 128, 128)
-  sprite_stack[key] = q
+  data.sprite_cache[key] = q
  end
  love.graphics.setColor(1,1,1)
- love.graphics.draw(spritesheet, sprite_stack[key], dx, dy, 0, dw/sw, dh/sh)
+ love.graphics.draw(data.sprite_sheet, data.sprite_cache[key], dx, dy, 0, dw/sw, dh/sh)
 end
 
 -- Draw sprite n at position x, y.
@@ -164,10 +169,10 @@ function spr(n, x, y, w, h, flip_x, flip_y)
  for yoffset = 0, 7 do
   for xoffset = 0, 7 do
    -- Lookup pixel colour index
-   local index = spritesheet_map[sprite_x + xoffset][sprite_y + yoffset]
+   local index = data.sprite_sheet_map[sprite_x + xoffset][sprite_y + yoffset]
    -- Swap the palette
-   if palette_swap then
-    index = palette_swap[index] or index
+   if data.palette_swap then
+    index = data.palette_swap[index] or index
    end
    -- Draw non-transparent colours
    if index > 1 then
@@ -181,7 +186,7 @@ end
 
 -- Get colour index of sprite sheet pixel x, y.
 function sget(x, y)
- return spritesheet_map[x][y]
+ return data.sprite_sheet_map[x][y]
 end
 
 -- Set drawing translation offset.
@@ -206,7 +211,7 @@ end
 -- Note: fade_len not implemented.
 function music(n)
  if n == 0 then
-  love.audio.play(game_music)
+  love.audio.play(data.game_music)
  elseif n == -1 then
   love.audio.stop()
  end
@@ -215,16 +220,16 @@ end
 -- Play sound effect n.
 -- Note: negative values of n, note offset and length are not implemented.
 function sfx(n)
- if game_sfx[n] then
-  game_sfx[n]:seek(0)
-  love.audio.play(game_sfx[n])
+ if data.game_sfx[n] then
+  data.game_sfx[n]:seek(0)
+  love.audio.play(data.game_sfx[n])
  end
 end
 
 -- Test button was pressed in the current game loop.
 -- Note: player (p) not implemented.
 function btnp(i, p)
- return buttonstack[i]
+ return data.button_stack[i]
 end
 
 -- Test button is held down.
@@ -314,47 +319,68 @@ function deli(t, i)
  table.remove(t, i)
 end
 
--------------------------------------------------------------------[ Globals   ]
--- TODO refactor globals into tables of config, data
+-- ╒═══════════════════════════════════════════════════════════════════════════╕
+-- │ GLOBALS                                                                   │
+-- ├───────────────────────────────────────────────────────────────────────────┘
+-- │                                                                         ┌─┐
+-- ╘═════════════════════════════════════════════════════════════════════════╧═╛
 
--- Limit updates to 30 frames per second, to match the original game's speed.
-fpslimit = 1/30
-fpscounter = 0
+config = {
 
--- Simulate the button press function (btnp) by storing key presses.
--- These are cleared at the end of the update frame.
-buttonstack = {}
+ -- Limit to 30 frames/sec
+ fpslimit = 1/30,
+ fpscounter = 0,
 
--- All draw operations happen on a canvas.
--- This allows us to use the original game code, which targets a 128x128 screen.
--- We scale the canvas up as needed to fit the display.
--- A canvas allows us to emulate how Pico does not clear the display each draw.
-screen_canvas = nil
+ -- Render scale size when windowed
+ windowed_scale = 6,
 
--- The ratio to scale the canvas by.
-DEFAULT_RENDER_SCALE = 6
+ -- Render scale size (set in love.load)
+ render_scale = 0,
 
--- The variable ratio, which is adjusted to fit the display on full screen toggle.
-RENDER_SCALE = DEFAULT_RENDER_SCALE
+ -- Horizontal alignment
+ render_alignment = 0,
 
--- Offset canvas to display for full screen centering
-RENDER_LEFT = 0
+ -- Full screen flag - toggle with Alt+Return
+ is_full_screen = false,
 
--- Flag tracks full screen mode - toggle with Alt+Return
-is_full_screen = false
+ -- Track the quit game prompt
+ quit_game_prompt = false,
 
--- Spritesheet storage
-spritesheet = nil
+ -- Window dimensions
+ window_w = 0,
+ window_h = 0,
 
--- Quad cache for calls to spr()
-sprite_stack = {}
+}
 
--- Music and Sounds
-game_music = nil
-game_sfx = nil
+data = {
 
--- Track the quit game prompt
-quit_game_prompt = false
+ -- Simulate Pico's btnp() function by storing key presses
+ -- and clearing them after the update frame.
+ button_stack = {},
+
+ -- Off-screen drawing canvas
+ screen_canvas = nil,
+
+ -- Sprite sheet
+ sprite_sheet = nil,
+ sprite_sheet_image_data = nil,
+ sprite_sheet_map = nil,
+
+ -- Quad cache for calls to sspr()
+ sprite_cache = {},
+
+ -- Music and Sounds
+ game_music = nil,
+ game_sfx = nil,
+
+ -- Fonts
+ small_font = nil,
+ large_font = nil,
+
+ -- Palette swap storage
+ palette_swap
+
+}
 
 ----------------------------------------------------------[ Palette Swapping   ]
 -- │ I achieved this by predefining the RGB components of the 16 colors used in
@@ -411,33 +437,33 @@ function setup_palette()
   palette_lookup[r][g][b] = k
  end
 
- -- Scan the spritesheet to build a map of each pixel and it's color index.
+ -- Scan the sprite sheet to build a map of each pixel and it's color index.
  -- This allows quick color lookup without repeat calls to getPixel().
- spritesheet_map = {}
- local width, height = spritesheetdata:getDimensions()
+ data.sprite_sheet_map = {}
+ local width, height = data.sprite_sheet_image_data:getDimensions()
  for y = 0, height-1 do
   for x = 0, width-1 do
 
    -- Get the pixel components
-   local r, g, b = spritesheetdata:getPixel(x, y)
+   local r, g, b = data.sprite_sheet_image_data:getPixel(x, y)
 
    -- Round their values
    r, g, b = round(r,2), round(g,2), round(b,2)
 
    -- Create the X component map
-   spritesheet_map[x] = spritesheet_map[x] or {}
+   data.sprite_sheet_map[x] = data.sprite_sheet_map[x] or {}
 
    -- Look up this RGB palette color equivalent
    local cindex = palette_lookup[r][g][b]
 
    -- Store the index for this pixel
-   spritesheet_map[x][y] = cindex
+   data.sprite_sheet_map[x][y] = cindex
 
    -- Write this pixel in imagedata as transparent
    -- so that calls to sspr() works as expected.
    -- color 1 is black/transparent.
    if cindex == 1 then
-    spritesheetdata:setPixel(x, y, 1, 1, 1, 0)
+    data.sprite_sheet_image_data:setPixel(x, y, 1, 1, 1, 0)
    end
 
   end
@@ -446,20 +472,19 @@ function setup_palette()
 end
 
 -- Set palette swap values.
--- Compensate for Pico-8's 0 based color indexing.
+-- Compensate for Pico-8's 0 based colour indexing.
 function pal(a, b)
  -- Clear the palette swap table
  if not a or not b then
-  palette_swap = nil
+  data.palette_swap = nil
   return
  end
  -- Create a new palette swap table, preserving existing
- palette_swap = palette_swap or {}
- -- Store the palette swap color indexes
+ data.palette_swap = data.palette_swap or {}
+ -- Store the palette swap colour indexes
  -- Note: The Pico-8 pal() method can also receive a table of mappings.
  -- This is not implemented as this game did not use that method signature.
- -- This is left as an exercise for the reader.
- palette_swap[a+1] = b+1
+ data.palette_swap[a+1] = b+1
 end
 
 
@@ -623,37 +648,39 @@ function love.load()
  love.graphics.setLineStyle("rough")
 
  -- Set up the display
- WINDOW_W, WINDOW_H = 128*RENDER_SCALE, 128*RENDER_SCALE
- love.window.setMode(WINDOW_W, WINDOW_H)
+ config.render_scale = config.windowed_scale
+ config.window_w = 128 * config.render_scale
+ config.window_h = 128 * config.render_scale
+ love.window.setMode(config.window_w, config.window_h)
 
  -- Load the font
- smallfont = love.graphics.newFont("PICO-8 mono.ttf", 4, "mono")
- largefont = love.graphics.newFont("PICO-8 mono.ttf", 20, "mono")
- love.graphics.setFont(smallfont)
+ data.small_font = love.graphics.newFont("PICO-8 mono.ttf", 4, "mono")
+ data.large_font = love.graphics.newFont("PICO-8 mono.ttf", 20, "mono")
+ love.graphics.setFont(data.small_font)
 
- -- Load the spritesheet image data
- spritesheetdata = love.image.newImageData('spritesheet.png')
+ -- Load the sprite sheet image data
+ data.sprite_sheet_image_data = love.image.newImageData('spritesheet.png')
 
- -- Set up palette rotation tables. Alter spritesheet data to be transparent.
+ -- Set up palette rotation tables. Alter sprite sheet data to be transparent.
  setup_palette()
 
- -- Create the spritesheet image from altered image data
- spritesheet = love.graphics.newImage(spritesheetdata)
+ -- Create the sprite sheet image from altered image data
+ data.sprite_sheet = love.graphics.newImage(data.sprite_sheet_image_data)
 
  -- Allocate the off-screen drawing canvas
- screen_canvas = love.graphics.newCanvas(128, 128)
+ data.screen_canvas = love.graphics.newCanvas(128, 128)
 
  -- Load game music and sound effects
- game_music = love.audio.newSource("virulent.ogg", "stream")
- game_sfx = {}
- game_sfx[0] = love.audio.newSource("sfx0.ogg", "static")
- game_sfx[1] = love.audio.newSource("sfx1.ogg", "static")
- game_sfx[2] = love.audio.newSource("sfx2.ogg", "static")
- game_sfx[3] = love.audio.newSource("sfx3.ogg", "static")
- game_sfx[4] = love.audio.newSource("sfx4.ogg", "static")
- game_sfx[5] = love.audio.newSource("sfx5.ogg", "static")
- game_sfx[6] = love.audio.newSource("sfx6.ogg", "static")
- game_sfx[7] = love.audio.newSource("sfx7.ogg", "static")
+ data.game_music = love.audio.newSource("virulent.ogg", "stream")
+ data.game_sfx = {}
+ data.game_sfx[0] = love.audio.newSource("sfx0.ogg", "static")
+ data.game_sfx[1] = love.audio.newSource("sfx1.ogg", "static")
+ data.game_sfx[2] = love.audio.newSource("sfx2.ogg", "static")
+ data.game_sfx[3] = love.audio.newSource("sfx3.ogg", "static")
+ data.game_sfx[4] = love.audio.newSource("sfx4.ogg", "static")
+ data.game_sfx[5] = love.audio.newSource("sfx5.ogg", "static")
+ data.game_sfx[6] = love.audio.newSource("sfx6.ogg", "static")
+ data.game_sfx[7] = love.audio.newSource("sfx7.ogg", "static")
 
  -- Enable key press repeating
  love.keyboard.setKeyRepeat(true)
@@ -675,18 +702,18 @@ end
 function love.update(dt)
 
  -- Pause updates while prompting to quit
- if quit_game_prompt then
+ if config.quit_game_prompt then
   return
  end
 
  -- Update limiter
- fpscounter = fpscounter + dt
- if fpscounter < fpslimit then
+ config.fpscounter = config.fpscounter + dt
+ if config.fpscounter < config.fpslimit then
   return
  end
 
  -- Resume counting the amount over the limit
- fpscounter = fpslimit - fpscounter
+ config.fpscounter = config.fpslimit - config.fpscounter
 
  -- Update the game state
  if state then
@@ -694,16 +721,16 @@ function love.update(dt)
  end
 
  -- Clear the button pressed stack
- buttonstack = {}
+ data.button_stack = {}
 end
 
 function love.draw()
 
   -- State drawing is paused while quit_game_prompt
- if not quit_game_prompt then
+ if not config.quit_game_prompt then
 
   -- Scope drawing to canvas
-  love.graphics.setCanvas(screen_canvas)
+  love.graphics.setCanvas(data.screen_canvas)
 
   -- Draw the game state
   if state then
@@ -716,14 +743,14 @@ function love.draw()
  love.graphics.setCanvas()
  love.graphics.setColor(1,1,1)
  love.graphics.setBlendMode("alpha", "premultiplied")
- love.graphics.draw(screen_canvas, RENDER_LEFT, 0, 0, RENDER_SCALE, RENDER_SCALE)
+ love.graphics.draw(data.screen_canvas, config.render_alignment, 0, 0, config.render_scale, config.render_scale)
  love.graphics.setBlendMode("alpha", "alphamultiply")
 
- if quit_game_prompt then
+ if config.quit_game_prompt then
   love.graphics.setColor(0,0,0,0.7)
-  love.graphics.rectangle("fill",RENDER_LEFT,0,WINDOW_W, WINDOW_H)
+  love.graphics.rectangle("fill", config.render_alignment,0, config.window_w, config.window_h)
   love.graphics.setColor(1,0,0)
-  love.graphics.print("Quit? [Y/N]", RENDER_LEFT + (WINDOW_W/2)-100, (WINDOW_H/2))
+  love.graphics.print("Quit? [Y/N]", config.render_alignment + (config.window_w/2)-100, (config.window_h/2))
  end
 
 end
@@ -731,23 +758,23 @@ end
 function love.keypressed(key, scancode, isrepeat)
 
  -- Handle quit keys
- if quit_game_prompt then
+ if config.quit_game_prompt then
   if key == "y" then
    love.event.quit()
   elseif key == "n" or key == "escape" then
-   quit_game_prompt = false
-   love.graphics.setFont(smallfont)
+   config.quit_game_prompt = false
+   love.graphics.setFont(data.small_font)
   end
   -- Stop processing further keys
   return
  end
 
  -- capture key presses
- buttonstack[key] = true
+ data.button_stack[key] = true
 
  if key == "escape" then
-  quit_game_prompt = true
-  love.graphics.setFont(largefont)
+  config.quit_game_prompt = true
+  love.graphics.setFont(data.large_font)
  elseif key == "printscreen" then
   love.graphics.captureScreenshot('virulent_' .. os.time() .. '.png')
  elseif key == "return" then
@@ -758,27 +785,27 @@ function love.keypressed(key, scancode, isrepeat)
 end
 
 function toggle_fullscreen()
- is_full_screen = not is_full_screen
- if is_full_screen then
+ config.is_full_screen = not config.is_full_screen
+ if config.is_full_screen then
   -- Fetch flags of current display where our game is running
   local _, _, flags = love.window.getMode()
   -- Fetch the display size
   local disp_w, disp_h = love.window.getDesktopDimensions(flags.display)
   -- Estimate the nominal scale given the native display size
-  RENDER_SCALE = math.floor(disp_h/128)
+  config.render_scale = math.floor(disp_h/128)
   -- Estimate the left offset for center translation
-  RENDER_LEFT = (disp_w/2) - ((128*RENDER_SCALE)/2)
-  WINDOW_W, WINDOW_H = 128*RENDER_SCALE, 128*RENDER_SCALE
+  config.render_alignment = (disp_w/2) - ((128 * config.render_scale)/2)
+  config.window_w, config.window_h = 128 * config.render_scale, 128 * config.render_scale
   -- Make it so!
-  love.window.setMode(WINDOW_W, WINDOW_H, {fullscreen=true})
+  love.window.setMode(config.window_w, config.window_h, {fullscreen=true})
   -- hide cursor
   love.mouse.setVisible(false)
  else
   -- Restore default render scale and window
-  RENDER_LEFT = 0
-  RENDER_SCALE = DEFAULT_RENDER_SCALE
-  WINDOW_W, WINDOW_H = 128*RENDER_SCALE, 128*RENDER_SCALE
-  love.window.setMode(WINDOW_W, WINDOW_H, {fullscreen=false})
+  config.render_alignment = 0
+  config.render_scale = config.windowed_scale
+  config.window_w, config.window_h = 128 * config.render_scale, 128 * config.render_scale
+  love.window.setMode(config.window_w, config.window_h, {fullscreen=false})
   -- show cursor
   love.mouse.setVisible(true)
  end
@@ -806,7 +833,7 @@ function switch(s,arg)
  --  :new state
  --  :opt arguments
  -- Since switch() is called from an update(), the canvas is not yet set.
- love.graphics.setCanvas(screen_canvas)
+ love.graphics.setCanvas(data.screen_canvas)
  s.init(arg)
  -- Pop it since the pump can't work with an active canvas.
  love.graphics.setCanvas()
@@ -987,7 +1014,7 @@ function landhit(x,y)
    -- translate pos rel to origin
    local cx=x-dx
    local cy=y-dy
-   -- pos in spritesheet
+   -- pos in sprite sheet
    cx=flr(cx+(dat[1]%16)*8)
    cy=flr(cy+flr(dat[1]/16)*8)
    -- test pixel color: a hit is any but transparent
