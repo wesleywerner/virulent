@@ -1,43 +1,104 @@
 -- virulent
--- by Wesley Werner Licensed under GPL version 2 - 2020, 2021
+-- by Wesley Werner Copyright 2020, 2021
 --
--- I ported this from my Pico-8 version of the game.
--- Very little of the original code was changed. I wrote a compatibility layer
--- to provide the Pico API through LÖVE, and implemented an off-screen canvas
--- of 128x128 pixels, which is scaled up on render.
+-- ╒═══════════════════════════════════════════════════════════════════════════╕
+-- │ LICENSE                                                                   │
+-- ├───────────────────────────────────────────────────────────────────────────┤
+-- │ This is a remake of the Atari game "Epidemic!" by Steven Faber (1982).    │
+-- │ This code, the game art, the music and screen layouts are my own work.    │
+-- │                                                                           │
+-- ├───────────────────────────────────────────────────────────────────────────┘
+-- │ This program is free software; you can redistribute it and/or modify
+-- │ it under the terms of the GNU General Public License as published by
+-- │ the Free Software Foundation; either version 2 of the License, or
+-- │ (at your option) any later version.
+-- │
+-- │ This program is distributed in the hope that it will be useful,
+-- │ but WITHOUT ANY WARRANTY; without even the implied warranty of
+-- │ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-- │ GNU General Public License for more details.
+-- │
+-- │ You should have received a copy of the GNU General Public License
+-- │ along with this program; if not, write to the Free Software
+-- │ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+-- │ MA 02110-1301, USA.                                                     ┌─┐
+-- ╘═════════════════════════════════════════════════════════════════════════╧═╛
 --
--- The most challenging was emulating a 16 color palette swapping routine.
--- I achieved this by predefining the RGB components of the 16 colors used in
--- the sprite sheet, and generate a palette lookup table to easily find the
--- color index of a RGB combination. I then generate a map of the sprite sheet
--- which stores the color index for each pixel. While processing this pixel map
--- I sneakily update the alpha value in the sprite sheet image data so that
--- the `sspr` drawing function knows about transparency.
--- Finally in the sprite drawing function `spr` I perform a color conversion
--- if a palette swap table is set for the drawing operation.
--- You can find these functions, and some commented code, under the
--- "Palette Swapping" code.
+-- ╒═══════════════════════════════════════════════════════════════════════════╕
+-- │ PROGRAMMER'S PROLOGUE                                                     │
+-- ├───────────────────────────────────────────────────────────────────────────┘
+-- │ In July of 2020 I started work on the remake in Pico-8. It took
+-- │ four weekends to complete. For those not familiar with Pico-8, it is a
+-- │ fantasy console for making small games using Lua 5.2 as the interpreter.
+-- │ Pico-8 has a built-in sprite and music editor, the latter akin to mod
+-- │ trackers of ye olde days.
+-- │
+-- │ Pico games are shared as cartridges in the form of a PNG file, the code
+-- │ is encoded within the image data, which is a screen grab of your game.
+-- │
+-- │ Pico has "harsh limitations" such as:
+-- │
+-- │   - 128x128 display resolution
+-- │   - fixed 16 colour palette
+-- │   - 6 buttons (arrows, X, Z)
+-- │   - 128 8x8 sprites
+-- │   - upper limit of 32k cartridge size (includes code, sprites and music)
+-- │   - 8192 token limit; a token is a variable, operator, string or
+-- │     a pair of brackets.
+-- │
+-- │ To meet those limitations I recycled variables and documented their usage,
+-- │ game logic and lookup table definitions in a separate file.
+-- │ Find it in the "doc" directory and online at
+-- │ https://gist.github.com/wesleywerner/7eb03373f0d7b8c9125a4d557ee7e777
+-- │
+-- │ I updated the world data to reflect modern country names and statistics,
+-- │ and added three new countries: Madagascar, Southeast Asia and South Africa.
+-- │
+-- │ The code in this file is the ported version of my Pico-8 implementation.
+-- │ The goal was to change as little of the original as possible.
+-- │ To achieve this I wrote a compatibility layer that provides all the
+-- │ Pico API methods needed, and emulate them through the LÖVE API.
+-- │ Technical notes about each implementation appear in the code.
+-- │
+-- │ The palette swapping routine was a nice challenge, and a rewarding one
+-- │ to achieve when I saw the first colours swap on-screen.
+-- │
+-- │  Though one were to live a hundred years lazy and effortless, the
+-- │  life of a single day is better if one makes a real effort.
+-- │   -- Dhammapada verse 112
+-- │                                                                         ┌─┐
+-- ╘═════════════════════════════════════════════════════════════════════════╧═╛
 --
--- Due to Pico-8's limited program size, I re-used variables across the different
--- game states. I also had to document the code in a separate file.
--- You can find this file under the "doc" directory of the git repo, or online at
--- https://gist.github.com/wesleywerner/7eb03373f0d7b8c9125a4d557ee7e777
+-- ╒═══════════════════════════════════════════════════════════════════════════╕
+-- │ PICO-8 COMPATIBILITY LAYER                                                │
+-- ├───────────────────────────────────────────────────────────────────────────┘
+-- │ Not all Pico methods are implemented, or fully implemented.
+-- │ Only those used by Virulent are.
+-- │ Each method is annotated where functionality is amiss, and remains
+-- │ as an exercise for the reader.
+-- │                                                                         ┌─┐
+-- ╘═════════════════════════════════════════════════════════════════════════╧═╛
 
------------------------------------------------------[ Pico Love Compatibility ]
+-- Pico's print() method displays text on-screen.
+-- We store a reference to the Lua print method for debugging purposes.
+print_console = print
 
-printcon = print
-
+-- Helper method sets the drawing colour from palette index c.
+-- We +1 as Pico's palette is zero based, while our palette is 1 based.
+-- Defaults to black if no c is given.
 function setPalette(c)
  love.graphics.setColor(palette[math.floor(c or 0)+1])
 end
 
--- Clears the canvas
-function cls(n)
- rectfill(0,0,127,127,n)
+-- Clear the screen with the given colour c.
+function cls(c)
+ rectfill(0,0,127,127,c)
 end
 
--- Set draw clipping
-function clip(x, y, w, h)
+-- Set draw clipping region.
+-- Clears previously set region if parameters not given.
+-- Note: clip_previous not implemented
+function clip(x, y, w, h, clip_previous)
  if not x then
   love.graphics.setScissor()
  else
@@ -45,32 +106,41 @@ function clip(x, y, w, h)
  end
 end
 
+-- Draw rectangle with colour c.
 function rect(x0, y0, x1, y1, c)
  setPalette(c)
  love.graphics.rectangle("line", x0, y0, x1-x0, y1-y0)
 end
 
+-- Fill rectangle with colour c.
 function rectfill(x0, y0, x1, y1, c)
  setPalette(c)
  love.graphics.rectangle("fill", x0, y0, x1-x0+1, y1-y0+1)
 end
 
--- Draw a point
+-- Draw pixel of colour c.
 function pset(x, y, c)
  setPalette(c)
  love.graphics.points(x, y)
 end
 
+-- Draw circle of radius r with colour c.
 function circ(x, y, r, c)
  setPalette(c)
  love.graphics.circle("line", x, y, r)
 end
 
-function line(x0, y0, x1, y1, col)
- setPalette(col)
+-- Draw line with colour c.
+-- Note: not implemented: if x1,y1 are not given the end of the last line is used
+function line(x0, y0, x1, y1, c)
+ setPalette(c)
  love.graphics.line(x0, y0, x1, y1)
 end
 
+-- Stretch rectangle from sprite sheet (sx, sy, sw, sh)
+-- and draw in rectangle (dx, dy, dw, dh).
+-- Source quads are cached as they are expensive.
+-- Note: flip_x, flip_y not implemented.
 function sspr(sx, sy, sw, sh, dx, dy, dw, dh, flip_x, flip_y)
  local key = sx .. sy .. sw .. sh
  if not sprite_stack[key] then
@@ -81,24 +151,41 @@ function sspr(sx, sy, sw, sh, dx, dy, dw, dh, flip_x, flip_y)
  love.graphics.draw(spritesheet, sprite_stack[key], dx, dy, 0, dw/sw, dh/sh)
 end
 
--- Sprite drawing function which does not handle transparent pixels.
---function spr(key, x, y)
--- if sprite_stack[key] == nil then
---  local sprite_x = (key % 16) * 8
---  local sprite_y = math.floor(key/16) * 8
---  local q = love.graphics.newQuad(sprite_x, sprite_y, 8, 8, 128, 128)
---  sprite_stack[key] = q
--- end
--- love.graphics.setColor(1,1,1)
--- love.graphics.draw(spritesheet, sprite_stack[key], x, y)
---end
+-- Draw sprite n at position x, y.
+-- Uses palette lookups to swap colours, as set in method pal().
+-- Note: w, h, flip_x, flip_y not implemented.
+function spr(n, x, y, w, h, flip_x, flip_y)
 
--- Get the palette index of a pixel in the spritesheet at x,y.
+ -- Position in the sprite sheet
+ local sprite_x = (n % 16) * 8
+ local sprite_y = math.floor(n / 16) * 8
+
+ -- Draw each 8x8 sprite pixel
+ for yoffset = 0, 7 do
+  for xoffset = 0, 7 do
+   -- Lookup pixel colour index
+   local index = spritesheet_map[sprite_x + xoffset][sprite_y + yoffset]
+   -- Swap the palette
+   if palette_swap then
+    index = palette_swap[index] or index
+   end
+   -- Draw non-transparent colours
+   if index > 1 then
+    love.graphics.setColor(palette[index])
+    love.graphics.points(x+xoffset+1, y+yoffset+1)
+   end
+  end
+ end
+
+end
+
+-- Get colour index of sprite sheet pixel x, y.
 function sget(x, y)
  return spritesheet_map[x][y]
 end
 
--- Draw translation
+-- Set drawing translation offset.
+-- Empty parameters clear the effect.
 function camera(x, y)
  if not x then
   love.graphics.origin()
@@ -107,14 +194,16 @@ function camera(x, y)
  end
 end
 
+-- Print text of colour c on screen.
+-- Note: variant signature (text, c) not implemented.
 function print(text, x, y, c)
  setPalette(c)
  love.graphics.print(text, x, y)
 end
 
--- Play a music track.
--- This game only has one, 0.
--- A negative stops music.
+-- Play music track n.
+-- Negative one stops music.
+-- Note: fade_len not implemented.
 function music(n)
  if n == 0 then
   love.audio.play(game_music)
@@ -123,7 +212,8 @@ function music(n)
  end
 end
 
--- Play a sound effect.
+-- Play sound effect n.
+-- Note: negative values of n, note offset and length are not implemented.
 function sfx(n)
  if game_sfx[n] then
   game_sfx[n]:seek(0)
@@ -131,64 +221,76 @@ function sfx(n)
  end
 end
 
--- Simulate Pico's button pressed functionality.
--- A key held
-function btnp(n)
- return buttonstack[n]
+-- Test button was pressed in the current game loop.
+-- Note: player (p) not implemented.
+function btnp(i, p)
+ return buttonstack[i]
 end
 
-function btn(n)
- return love.keyboard.isDown(n)
+-- Test button is held down.
+-- Note: player (p) not implemented.
+function btn(i, p)
+ return love.keyboard.isDown(i)
 end
 
--- Returns a random number between 0..1 if not argument is given.
--- Returns a number between 0 <= n < x if a number argument is given.
--- Returns a random item if an array-style table argument is given.
-function rnd(n)
- if type(n) == "table" then
-  return n[1+math.floor(love.math.random()*#n)]
+-- Get random value.
+-- * x not given: get number between 0..1
+-- * x is number: get number n where 0 <= n < x
+-- * x is table: get random item from x[1]..x[#x]
+function rnd(x)
+ if type(x) == "table" then
+  return x[1+math.floor(love.math.random()*#x)]
  else
-  return love.math.random() * (n or 1)
+  return love.math.random() * (x or 1)
  end
 end
 
-function flr(n)
- return math.floor(n)
+-- Get lower integer.
+function flr(x)
+ return math.floor(x)
 end
 
-function ceil(n)
- return math.ceil(n)
+-- Get higher integer.
+function ceil(x)
+ return math.ceil(x)
 end
 
+-- Get positive integer.
 function abs(x)
  return math.abs(x)
 end
 
+-- Get square root of x.
 function sqrt(x)
  return math.sqrt(x)
 end
 
+-- Get inverse tangent of point.
 function atan2(dx, dy)
  return math.atan2(dy, dx)
 end
 
-function cos(n)
- return math.cos(n)
+-- Get inverse cosine of x.
+function cos(x)
+ return math.cos(x)
 end
 
-function sin(n)
- return math.sin(n)
+-- Get inverse sine of x.
+function sin(x)
+ return math.sin(x)
 end
 
--- Min and max functions
-function min(a, b)
- return math.min(a, b)
-end
-function max(a, b)
- return math.max(a, b)
+-- Get minimum of x or y.
+function min(x, y)
+ return math.min(x, y)
 end
 
--- Add item to table
+-- Get maximum of x or y.
+function max(x, y)
+ return math.max(x, y)
+end
+
+-- Add v to table t at position i.
 function add(t, v, i)
  if type(i) == "number" then
   table.insert(t, i, v)
@@ -197,7 +299,7 @@ function add(t, v, i)
  end
 end
 
--- Delete first occurence of a value from a table.
+-- Remove first instance of v from table t.
 function del(t, v)
  for i,b in ipairs(t) do
   if b==v then
@@ -207,11 +309,13 @@ function del(t, v)
  end
 end
 
+-- Remove item at index i from table t.
 function deli(t, i)
  table.remove(t, i)
 end
 
 -------------------------------------------------------------------[ Globals   ]
+-- TODO refactor globals into tables of config, data
 
 -- Limit updates to 30 frames per second, to match the original game's speed.
 fpslimit = 1/30
@@ -253,6 +357,16 @@ game_sfx = nil
 quit_game_prompt = false
 
 ----------------------------------------------------------[ Palette Swapping   ]
+-- │ I achieved this by predefining the RGB components of the 16 colors used in
+-- │ the sprite sheet, and generate a palette lookup table to easily find the
+-- │ color index of a RGB combination. I then generate a map of the sprite sheet
+-- │ which stores the color index for each pixel. While processing this pixel map
+-- │ I sneakily update the alpha value in the sprite sheet image data so that
+-- │ the `sspr` drawing function knows about transparency.
+-- │ Finally in the sprite drawing function `spr` I perform a color conversion
+-- │ if a palette swap table is set for the drawing operation.
+-- │ You can find these functions, and some commented code, under the
+-- │ "Palette Swapping" code.
 
 function round(num, numDecimalPlaces)
  local mult = 10^(numDecimalPlaces or 0)
@@ -348,31 +462,6 @@ function pal(a, b)
  palette_swap[a+1] = b+1
 end
 
--- Custom sprite drawing that uses palette lookups to swap colors
-function spr(key, x, y)
-
- -- Derive the XY position in the sprite sheet
- local sprite_x = (key % 16) * 8
- local sprite_y = math.floor(key/16) * 8
-
- -- Draw each pixel in the 8x8 sprite
- for yoffset = 0, 7 do
-  for xoffset = 0, 7 do
-   -- Lookup the palette index for this pixel
-   local index = spritesheet_map[sprite_x+xoffset][sprite_y+yoffset]
-   -- Swap the palette
-   if palette_swap then
-    index = palette_swap[index] or index
-   end
-   -- Draw non-transparent color
-   if index > 1 then
-    love.graphics.setColor(palette[index])
-    love.graphics.points(x+xoffset+1, y+yoffset+1)
-   end
-  end
- end
-
-end
 
 ----------------------------------------------------------[ Lookup Tables      ]
 -->8
@@ -511,6 +600,18 @@ gstats={
  {11, 250},
  {12,   0}
 }
+
+---------------------------------------------------------[ Debugging Functions ]
+
+function rotate_debug_logs()
+ love.filesystem.createDirectory("logs")
+ local logs = love.filesystem.getDirectoryItems("logs")
+ for _, filename in ipairs(logs) do
+  print_console("found log",filename)
+  -- seconds since then
+  print_console(os.difftime(os.time(), 1615640963))
+ end
+end
 
 ----------------------------------------------------------[ Love               ]
 function love.load()
@@ -3060,3 +3161,23 @@ function cmk.between(a,b)
  cmk.ba,cmk.bb=a,b
  return cmk.br
 end
+
+-- ╒═══════════════════════════════════════════════════════════════════════════╕
+-- │                                                                           │
+-- ├───────────────────────────────────────────────────────────────────────────┘
+-- │
+-- │
+-- │
+-- │
+-- │
+-- │
+-- │
+-- │
+-- │
+-- │
+-- │
+-- │
+-- │
+-- │                                                                         ┌─┐
+-- ╘═════════════════════════════════════════════════════════════════════════╧═╛
+--
