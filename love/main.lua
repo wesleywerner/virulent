@@ -210,6 +210,9 @@ end
 -- Negative one stops music.
 -- Note: fade_len not implemented.
 function music(n)
+ if config.is_muted then
+  return
+ end
  if n == 0 then
   love.audio.play(data.game_music)
  elseif n == -1 then
@@ -220,6 +223,9 @@ end
 -- Play sound effect n.
 -- Note: negative values of n, note offset and length are not implemented.
 function sfx(n)
+ if config.is_muted then
+  return
+ end
  if data.game_sfx[n] then
   data.game_sfx[n]:seek(0)
   love.audio.play(data.game_sfx[n])
@@ -342,6 +348,9 @@ config = {
 
  -- Full screen flag - toggle with Alt+Return
  is_full_screen = false,
+
+ -- All audio is muted
+ is_muted = false,
 
  -- Track the quit game prompt
  quit_game_prompt = false,
@@ -657,8 +666,17 @@ function love.keypressed(key, scancode, isrepeat)
  elseif key == "printscreen" then
   love.graphics.captureScreenshot('virulent_' .. os.time() .. '.png')
  elseif key == "return" then
-  if love.keyboard.isDown("ralt") then
+  if love.keyboard.isDown("lalt") or love.keyboard.isDown("ralt") then
    toggle_fullscreen()
+  end
+ elseif key == "m" then
+  if love.keyboard.isDown("lctrl") or love.keyboard.isDown("rctrl") then
+   config.is_muted = not config.is_muted
+   if config.is_muted then
+    love.audio.stop()
+   else
+    sfx(1)
+   end
   end
  end
 
