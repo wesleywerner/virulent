@@ -900,6 +900,8 @@ function printh(text)
 end
 
 function printw(m,a,b)
+-- comment below out to log debugging messages to "debug.txt"
+ if true then return end
  if m==1 then
   printw("---> START GAME")
   for n=1,#stats do
