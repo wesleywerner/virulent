@@ -1,0 +1,10 @@
+name = "Virulent"
+default_targets = ["win64"]
+build_directory = "../releases"
+
+love_files = [
+    "::git-ls-tree::",
+    "-*/.*",
+]
+
+icon_file = "../resources/icon.png"

@@ -6,7 +6,7 @@ I dedicate this game to every person who has been separated from their family or
 
 # Get It
 
-The LÖVE version is under the `love` directory of the repository.
+A LÖVE package, and a Windows build is available on the [releases page](https://github.com/wesleywerner/virulent/releases).
 
 The Pico-8 version is available as a cartridge, below. You need a copy of the Pico-8 fantasy console to load this cartridge.
 
