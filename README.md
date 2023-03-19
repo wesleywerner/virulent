@@ -1,3 +1,5 @@
+This repo has migrated to [Codeberg](https://codeberg.org/wesbot/virulent).
+
 # Virulent
 
 Virulent is a turn-based tactical game where you are in charge of managing a global viral outbreak, and if you are lucky, save the world.
